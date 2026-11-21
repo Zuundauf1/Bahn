@@ -1,157 +1,173 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Bahn-Tycoon</title>
+  <title>Moosburg Bahn- & Bus-Tycoon</title>
+  <link rel="stylesheet" href="https://unpkg.com" />
+  <script src="https://unpkg.com"></script>
   <style>
-    body { margin: 0; font-family: sans-serif; overflow: hidden; background: #1e293b; color: white; touch-action: none; }
-    #bar { position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(15,23,42,0.94); color: white; padding: 10px; border-radius: 10px; z-index: 10; display: flex; justify-content: space-around; }
-    #bot { position: fixed; bottom: 15px; left: 10px; right: 10px; background: rgba(15,23,42,0.95); color: white; padding: 12px; border-radius: 12px; z-index: 10; }
-    button { background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: bold; }
-    .go { background: #16a34a; width: 100%; margin-top: 8px; padding: 12px; font-size: 16px; }
-    #map-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; overflow: hidden; background: #cbd5e1; }
-    #tiles { position: absolute; top: 0; left: 0; }
-    svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    body { margin: 0; font-family: sans-serif; overflow: hidden; }
+    #map { height: 100vh; width: 100vw; }
+    #bar { position: fixed; top: 8px; left: 8px; right: 8px; background: rgba(15,23,42,0.94); color: white; padding: 8px 10px; border-radius: 12px; z-index: 9999; display: flex; justify-content: space-between; align-items: center; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    #bot { position: fixed; bottom: 10px; left: 8px; right: 8px; background: rgba(15,23,42,0.96); color: white; padding: 12px; border-radius: 14px; z-index: 9999; box-shadow: 0 4px 15px rgba(0,0,0,0.5); font-size: 13px; }
+    .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    button { background: #16a34a; color: white; border: none; padding: 9px; width: 100%; border-radius: 8px; font-size: 14px; font-weight: bold; margin-top: 5px; }
+    button.bus { background: #0284c7; }
+    button.sm { width: auto; padding: 5px 9px; margin: 0 1px; font-size: 12px; background: #2563eb; }
+    button.time { background: #334155; padding: 5px 8px; width: auto; margin: 0; font-size: 11px; }
+    button:disabled { background: #475569; color: #94a3b8; }
+    .pill { background: #1e293b; padding: 4px 8px; border-radius: 6px; border: 1px solid #334155; }
   </style>
 </head>
 <body>
   <div id="bar">
-    <span>Geld: <b id="g" style="color:#4ade80">500.000 €</b></span>
-    <span>Zeit: <b>So 13:30</b></span>
-    <span>Ruf: <b id="r" style="color:#facc15">80%</b></span>
+    <div>Geld: <b id="g" style="color:#4ade80">500.000 €</b></div>
+    <div>Ruf: <b id="rep" style="color:#facc15">80%</b></div>
+    <div>Bf. Moosburg: <b id="wait" style="color:#38bdf8">60 Pers.</b></div>
+    <button class="time" onclick="nextSlot()" id="slotBtn">📅 So 14:00 ↻</button>
   </div>
 
-  <div id="map-container">
-    <div id="tiles"></div>
-    <svg id="overlay"></svg>
-  </div>
+  <div id="map"></div>
 
   <div id="bot">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <span>Waggons: <b id="w">10</b> (<b id="p">800</b> Plätze)</span>
-      <div>
-        <button onclick="zoom(-1)">🔍-</button>
-        <button onclick="zoom(1)">🔍+</button>
-        <button onclick="w=Math.max(1,w-1);upd()">-1</button>
-        <button onclick="w=Math.min(20,w+1);upd()">+1</button>
-      </div>
+    <div class="row">
+      <span class="pill">2. Kl: <b id="w2">8</b> <button class="sm" onclick="modW(2,-1)">-</button><button class="sm" onclick="modW(2,1)">+</button></span>
+      <span class="pill">1. Kl: <b id="w1">2</b> <button class="sm" onclick="modW(1,-1)">-</button><button class="sm" onclick="modW(1,1)">+</button></span>
+      <span class="pill">Bistro: <b id="wb">1</b> <button class="sm" onclick="modW(0,-1)">-</button><button class="sm" onclick="modW(0,1)">+</button></span>
     </div>
-    <button class="go" onclick="go()">🚆 Abfahren (59 €)</button>
-    <div id="m" style="font-size:12px; margin-top:6px; text-align:center;">Ziehe die Karte mit dem Finger!</div>
+
+    <div class="row" style="font-size:12px; color:#cbd5e1;">
+      <span>Plätze: <b id="seats" style="color:white;">736</b> | Komfort: <b id="comf" style="color:#4ade80;">85%</b></span>
+      <span>Ticket: <b id="price" style="color:#facc15;">59 €</b> <button class="sm" style="background:#475569;" onclick="modPrice(-10)">-</button><button class="sm" style="background:#475569;" onclick="modPrice(10)">+</button></span>
+    </div>
+
+    <button class="bus" id="busBtn" onclick="runBus()">🚌 Zubringer-Bus Neustadt ➔ Bf. Moosburg (+45 Pers.)</button>
+    <button id="trainBtn" onclick="runTrain()">🚆 Fernzug München ➔ Moosburg ➔ Berlin starten</button>
+    <div id="m" style="font-size:11px; margin-top:6px; text-align:center; color:#94a3b8;">Echte Karte von Moosburg a.d. Isar inkl. Gleisnetz!</div>
   </div>
 
   <script>
-    let g = 500000, r = 80, w = 10, run = false;
-    let z = 13, cLat = 48.4682, cLng = 11.9365; // Start: Moosburg a.d. Isar
+    let g = 500000, rep = 80, wait = 60, tRun = false, bRun = false;
+    let w2 = 8, w1 = 2, wb = 1, price = 59;
 
-    const pts = [
-      { n: "München Hbf", lat: 48.1402, lng: 11.5583 },
-      { n: "Moosburg", lat: 48.4682, lng: 11.9365 },
-      { n: "Nürnberg Hbf", lat: 49.4456, lng: 11.0829 },
-      { n: "Berlin Hbf", lat: 52.5250, lng: 13.3694 }
-    ];
-    let tLat = pts.at(0).lat, tLng = pts.at(0).lng;
+    let slotIdx = 0;
+    const slots = new Array(
+      { label: "So 14:00 (Ansturm)", baseDemand: 1250, localWait: 60 },
+      { label: "Mo 07:30 (Pendler)", baseDemand: 480, localWait: 140 },
+      { label: "Mi 12:00 (Normal)", baseDemand: 620, localWait: 40 }
+    );
 
-    function project(lat, lng, zoomLvl) {
-      const n = Math.pow(2, zoomLvl);
-      const x = (lng + 180) / 360 * n;
-      const rad = lat * Math.PI / 180;
-      const y = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n;
-      return { x, y };
+    const map = L.map('map', { zoomControl: false }).setView(new Array(48.4682, 11.9365), 14);
+    L.tileLayer('https://openstreetmap.org{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://openrailwaymap.org{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    const busPts = new Array(
+      new Array(48.4765, 11.9235),
+      new Array(48.4688, 11.9315),
+      new Array(48.4682, 11.9365)
+    );
+    L.polyline(busPts, { color: '#0284c7', weight: 4, dashArray: '6, 6' }).addTo(map);
+    const busMarker = L.circleMarker(busPts.at(0), { radius: 8, color: 'white', fillColor: '#0284c7', fillOpacity: 1 }).addTo(map);
+
+    const railPts = new Array(
+      { n: "München Hbf", coords: new Array(48.1402, 11.5583) },
+      { n: "Bahnhof Moosburg", coords: new Array(48.4682, 11.9365) },
+      { n: "Nürnberg Hbf", coords: new Array(49.4456, 11.0829) },
+      { n: "Erfurt Hbf", coords: new Array(50.9722, 11.0385) },
+      { n: "Berlin Hbf", coords: new Array(52.5250, 13.3694) }
+    );
+    railPts.forEach(p => L.marker(p.coords).addTo(map).bindPopup(p.n));
+    L.polyline(railPts.map(p => p.coords), { color: '#f97316', weight: 4 }).addTo(map);
+
+    const trainMarker = L.circleMarker(railPts.at(0).coords, { radius: 10, color: 'white', fillColor: '#ef4444', fillOpacity: 1 }).addTo(map);
+
+    function updateUI() {
+      const totalW = w2 + w1 + wb;
+      const seats = (w2 * 80) + (w1 * 48);
+      const comfort = Math.min(100, 60 + (w1 * 5) + (wb * 15));
+      document.getElementById('w2').innerText = w2;
+      document.getElementById('w1').innerText = w1;
+      document.getElementById('wb').innerText = wb;
+      document.getElementById('seats').innerText = seats + " (" + totalW + " Wg.)";
+      document.getElementById('comf').innerText = comfort + "%";
+      document.getElementById('price').innerText = price + " €";
     }
 
-    function toScreen(lat, lng) {
-      const c = project(cLat, cLng, z);
-      const p = project(lat, lng, z);
-      return {
-        x: window.innerWidth / 2 + (p.x - c.x) * 256,
-        y: window.innerHeight / 2 + (p.y - c.y) * 256
-      };
+    function modW(type, d) {
+      if (tRun) return;
+      if (d > 0 && (w2 + w1 + wb) >= 20) return;
+      if (type === 2) w2 = Math.max(1, w2 + d);
+      if (type === 1) w1 = Math.max(0, w1 + d);
+      if (type === 0) wb = Math.max(0, Math.min(2, wb + d));
+      updateUI();
     }
 
-    function render() {
-      const tilesDiv = document.getElementById('tiles');
-      tilesDiv.innerHTML = '';
-      const c = project(cLat, cLng, z);
-      const bx = Math.floor(c.x), by = Math.floor(c.y);
-      const ox = window.innerWidth / 2 - (c.x - bx) * 256;
-      const oy = window.innerHeight / 2 - (c.y - by) * 256;
-
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = -3; dy <= 3; dy++) {
-          const img = document.createElement('img');
-          img.style.position = 'absolute';
-          img.style.left = (ox + dx * 256) + 'px';
-          img.style.top = (oy + dy * 256) + 'px';
-          img.style.width = '256px';
-          img.style.height = '256px';
-          // Echte Straßen, Flüsse & Bahngleise ohne Blockade!
-          img.src = `https://arcgisonline.com{z}/${by + dy}/${bx + dx}`;
-          tilesDiv.appendChild(img);
-        }
-      }
-
-      // Strecke, Bahnhöfe & Zug als scharfe Vektorgrafik darüberlegen
-      let svgHtml = '<polyline points="';
-      pts.forEach(p => { const s = toScreen(p.lat, p.lng); svgHtml += `${s.x},${s.y} `; });
-      svgHtml += '" fill="none" stroke="#f97316" stroke-width="5" />';
-
-      pts.forEach(p => {
-        const s = toScreen(p.lat, p.lng);
-        svgHtml += `<circle cx="${s.x}" cy="${s.y}" r="6" fill="#2563eb" stroke="white" stroke-width="2"/>`;
-        svgHtml += `<text x="${s.x + 10}" y="${s.y + 4}" fill="#0f172a" font-weight="bold" font-size="13" stroke="white" stroke-width="3" paint-order="stroke">${p.n}</text>`;
-      });
-
-      const ts = toScreen(tLat, tLng);
-      svgHtml += `<circle cx="${ts.x}" cy="${ts.y}" r="10" fill="#ef4444" stroke="white" stroke-width="3"/>`;
-      document.getElementById('overlay').innerHTML = svgHtml;
+    function modPrice(d) {
+      if (tRun) return;
+      price = Math.max(29, Math.min(119, price + d));
+      updateUI();
     }
 
-    let touch = null;
-    const cont = document.getElementById('map-container');
-    cont.addEventListener('touchstart', e => { touch = { x: e.touches.item(0).clientX, y: e.touches.item(0).clientY }; });
-    cont.addEventListener('touchmove', e => {
-      if (!touch) return;
-      const dx = e.touches.item(0).clientX - touch.x;
-      const dy = e.touches.item(0).clientY - touch.y;
-      const scale = 360 / (Math.pow(2, z) * 256);
-      cLng -= dx * scale;
-      cLat += dy * scale * Math.cos(cLat * Math.PI / 180);
-      touch = { x: e.touches.item(0).clientX, y: e.touches.item(0).clientY };
-      render();
-    });
+    function nextSlot() {
+      if (tRun) return;
+      slotIdx = (slotIdx + 1) % slots.length;
+      const s = slots.at(slotIdx);
+      wait = s.localWait;
+      document.getElementById('slotBtn').innerText = "📅 " + s.label + " ↻";
+      document.getElementById('wait').innerText = wait + " Pers.";
+      document.getElementById('m').innerText = "Fahrplan gewechselt: " + s.label;
+    }
 
-    function zoom(d) { z = Math.max(6, Math.min(16, z + d)); render(); }
-    function upd() { document.getElementById('w').innerText = w; document.getElementById('p').innerText = w*80; }
-
-    function go() {
-      if (run) return; run = true;
-      let i = 0;
-      let iv = setInterval(() => {
+    function runBus() {
+      if (bRun) return; bRun = true; document.getElementById('busBtn').disabled = true;
+      let i = 0, iv = setInterval(() => {
         i++;
-        if (i >= pts.length) {
-          clearInterval(iv);
-          let pass = Math.round(1350 * (r/100));
-          let win = pass * 59 - 8000 - w * 1200;
-          g += win; r = pass > w*80 ? Math.max(20, r-10) : Math.min(100, r+5);
-          document.getElementById('g').innerText = if (true) {
-            
-          }g.toLocaleString('de-DE') + ' €';
-          document.getElementById('r').innerText = r + '%';
-          document.getElementById('m').innerText = (pass > w*80 ? '⚠️ Überfüllt! ' : '✅ Top! ') + pass + '/' + (w*80) + ' Plätze | +' + win.toLocaleString('de-DE') + ' €';
-          tLat = pts.at(0).lat; tLng = pts.at(0).lng;
-          cLat = tLat; cLng = tLng;
-          render(); run = false; return;
+        if (i >= busPts.length) {
+          clearInterval(iv); wait += 45;
+          document.getElementById('wait').innerText = wait + ' Pers.';
+          document.getElementById('m').innerText = '🚌 Zubringer-Bus am Bf. Moosburg angekommen! (+45 Pers.)';
+          busMarker.setLatLng(busPts.at(0));
+          bRun = false; document.getElementById('busBtn').disabled = false; return;
         }
-        let ziel = pts.at(i);
-        tLat = ziel.lat; tLng = ziel.lng;
-        cLat = tLat; cLng = tLng;
-        render();
-      }, 1200);
+        busMarker.setLatLng(busPts.at(i));
+      }, 650);
     }
 
-    render();
+    function runTrain() {
+      if (tRun) return; tRun = true; document.getElementById('trainBtn').disabled = true;
+      let i = 0, iv = setInterval(() => {
+        i++;
+        if (i >= railPts.length) {
+          clearInterval(iv);
+          const s = slots.at(slotIdx);
+          const seats = (w2 * 80) + (w1 * 48);
+          const comfort = Math.min(100, 60 + (w1 * 5) + (wb * 15));
+          const demand = Math.round((s.baseDemand + wait) * (rep / 100) * (comfort / 80) * (75 / price));
+          const boarded = Math.min(demand, seats + 180);
+          const cost = 7500 + (w2 * 1100) + (w1 * 1600) + (wb * 2000);
+          const win = (boarded * price) - cost;
+
+          g += win;
+          rep = boarded > seats ? Math.max(20, rep - 12) : Math.min(100, rep + (comfort >= 85 ? 6 : 3));
+          wait = Math.round(s.localWait * 0.5);
+
+          document.getElementById('g').innerText = g.toLocaleString('de-DE') + ' €';
+          document.getElementById('rep').innerText = rep + '%';
+          document.getElementById('wait').innerText = wait + ' Pers.';
+          document.getElementById('m').innerText = (boarded > seats ? '⚠️ Stehplätze! ' : '✅ Top-Komfort! ') + boarded + '/' + seats + ' Plätze | Gewinn: ' + win.toLocaleString('de-DE') + ' €';
+
+          trainMarker.setLatLng(railPts.at(0).coords);
+          map.setView(new Array(48.4682, 11.9365), 14);
+          tRun = false; document.getElementById('trainBtn').disabled = false; return;
+        }
+        const ziel = railPts.at(i);
+        trainMarker.setLatLng(ziel.coords);
+        map.panTo(ziel.coords);
+      }, 1000);
+    }
+
+    updateUI();
   </script>
 </body>
 </html>
