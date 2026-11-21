@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Bahn-Tycoon</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; overflow: hidden; background: #1e293b; color: white; touch-action: none; }
+    #bar { position: fixed; top: 10px; left: 10px; right: 10px; background: rgba(15,23,42,0.94); color: white; padding: 10px; border-radius: 10px; z-index: 10; display: flex; justify-content: space-around; }
+    #bot { position: fixed; bottom: 15px; left: 10px; right: 10px; background: rgba(15,23,42,0.95); color: white; padding: 12px; border-radius: 12px; z-index: 10; }
+    button { background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: bold; }
+    .go { background: #16a34a; width: 100%; margin-top: 8px; padding: 12px; font-size: 16px; }
+    #map-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; overflow: hidden; background: #cbd5e1; }
+    #tiles { position: absolute; top: 0; left: 0; }
+    svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <span>Geld: <b id="g" style="color:#4ade80">500.000 €</b></span>
+    <span>Zeit: <b>So 13:30</b></span>
+    <span>Ruf: <b id="r" style="color:#facc15">80%</b></span>
+  </div>
+
+  <div id="map-container">
+    <div id="tiles"></div>
+    <svg id="overlay"></svg>
+  </div>
+
+  <div id="bot">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Waggons: <b id="w">10</b> (<b id="p">800</b> Plätze)</span>
+      <div>
+        <button onclick="zoom(-1)">🔍-</button>
+        <button onclick="zoom(1)">🔍+</button>
+        <button onclick="w=Math.max(1,w-1);upd()">-1</button>
+        <button onclick="w=Math.min(20,w+1);upd()">+1</button>
+      </div>
+    </div>
+    <button class="go" onclick="go()">🚆 Abfahren (59 €)</button>
+    <div id="m" style="font-size:12px; margin-top:6px; text-align:center;">Ziehe die Karte mit dem Finger!</div>
+  </div>
+
+  <script>
+    let g = 500000, r = 80, w = 10, run = false;
+    let z = 13, cLat = 48.4682, cLng = 11.9365; // Start: Moosburg a.d. Isar
+
+    const pts = [
+      { n: "München Hbf", lat: 48.1402, lng: 11.5583 },
+      { n: "Moosburg", lat: 48.4682, lng: 11.9365 },
+      { n: "Nürnberg Hbf", lat: 49.4456, lng: 11.0829 },
+      { n: "Berlin Hbf", lat: 52.5250, lng: 13.3694 }
+    ];
+    let tLat = pts.at(0).lat, tLng = pts.at(0).lng;
+
+    function project(lat, lng, zoomLvl) {
+      const n = Math.pow(2, zoomLvl);
+      const x = (lng + 180) / 360 * n;
+      const rad = lat * Math.PI / 180;
+      const y = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n;
+      return { x, y };
+    }
+
+    function toScreen(lat, lng) {
+      const c = project(cLat, cLng, z);
+      const p = project(lat, lng, z);
+      return {
+        x: window.innerWidth / 2 + (p.x - c.x) * 256,
+        y: window.innerHeight / 2 + (p.y - c.y) * 256
+      };
+    }
+
+    function render() {
+      const tilesDiv = document.getElementById('tiles');
+      tilesDiv.innerHTML = '';
+      const c = project(cLat, cLng, z);
+      const bx = Math.floor(c.x), by = Math.floor(c.y);
+      const ox = window.innerWidth / 2 - (c.x - bx) * 256;
+      const oy = window.innerHeight / 2 - (c.y - by) * 256;
+
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -3; dy <= 3; dy++) {
+          const img = document.createElement('img');
+          img.style.position = 'absolute';
+          img.style.left = (ox + dx * 256) + 'px';
+          img.style.top = (oy + dy * 256) + 'px';
+          img.style.width = '256px';
+          img.style.height = '256px';
+          // Echte Straßen, Flüsse & Bahngleise ohne Blockade!
+          img.src = `https://arcgisonline.com{z}/${by + dy}/${bx + dx}`;
+          tilesDiv.appendChild(img);
+        }
+      }
+
+      // Strecke, Bahnhöfe & Zug als scharfe Vektorgrafik darüberlegen
+      let svgHtml = '<polyline points="';
+      pts.forEach(p => { const s = toScreen(p.lat, p.lng); svgHtml += `${s.x},${s.y} `; });
+      svgHtml += '" fill="none" stroke="#f97316" stroke-width="5" />';
+
+      pts.forEach(p => {
+        const s = toScreen(p.lat, p.lng);
+        svgHtml += `<circle cx="${s.x}" cy="${s.y}" r="6" fill="#2563eb" stroke="white" stroke-width="2"/>`;
+        svgHtml += `<text x="${s.x + 10}" y="${s.y + 4}" fill="#0f172a" font-weight="bold" font-size="13" stroke="white" stroke-width="3" paint-order="stroke">${p.n}</text>`;
+      });
+
+      const ts = toScreen(tLat, tLng);
+      svgHtml += `<circle cx="${ts.x}" cy="${ts.y}" r="10" fill="#ef4444" stroke="white" stroke-width="3"/>`;
+      document.getElementById('overlay').innerHTML = svgHtml;
+    }
+
+    let touch = null;
+    const cont = document.getElementById('map-container');
+    cont.addEventListener('touchstart', e => { touch = { x: e.touches.item(0).clientX, y: e.touches.item(0).clientY }; });
+    cont.addEventListener('touchmove', e => {
+      if (!touch) return;
+      const dx = e.touches.item(0).clientX - touch.x;
+      const dy = e.touches.item(0).clientY - touch.y;
+      const scale = 360 / (Math.pow(2, z) * 256);
+      cLng -= dx * scale;
+      cLat += dy * scale * Math.cos(cLat * Math.PI / 180);
+      touch = { x: e.touches.item(0).clientX, y: e.touches.item(0).clientY };
+      render();
+    });
+
+    function zoom(d) { z = Math.max(6, Math.min(16, z + d)); render(); }
+    function upd() { document.getElementById('w').innerText = w; document.getElementById('p').innerText = w*80; }
+
+    function go() {
+      if (run) return; run = true;
+      let i = 0;
+      let iv = setInterval(() => {
+        i++;
+        if (i >= pts.length) {
+          clearInterval(iv);
+          let pass = Math.round(1350 * (r/100));
+          let win = pass * 59 - 8000 - w * 1200;
+          g += win; r = pass > w*80 ? Math.max(20, r-10) : Math.min(100, r+5);
+          document.getElementById('g').innerText = if (true) {
+            
+          }g.toLocaleString('de-DE') + ' €';
+          document.getElementById('r').innerText = r + '%';
+          document.getElementById('m').innerText = (pass > w*80 ? '⚠️ Überfüllt! ' : '✅ Top! ') + pass + '/' + (w*80) + ' Plätze | +' + win.toLocaleString('de-DE') + ' €';
+          tLat = pts.at(0).lat; tLng = pts.at(0).lng;
+          cLat = tLat; cLng = tLng;
+          render(); run = false; return;
+        }
+        let ziel = pts.at(i);
+        tLat = ziel.lat; tLng = ziel.lng;
+        cLat = tLat; cLng = tLng;
+        render();
+      }, 1200);
+    }
+
+    render();
+  </script>
+</body>
+</html>
